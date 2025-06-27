@@ -52,5 +52,5 @@ Version (Fallback):   3.18.2.3
 Version (Next boot):  3.20.0.92
 ```
 
-## Swithing Boot Partitions
+## Switching Boot Partitions
 To switch boot partitions, check out this project: https://github.com/ddvk/remarkable-update/blob/main/switch.sh
