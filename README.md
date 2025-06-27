@@ -5,7 +5,7 @@ A tiny bash script to report the active and fallback reMarkable OS versions.
 ## Installation & Usage
 All commands should be run on the tablet.
 
-### Fetch & run in one step 
+### Oneliner 
 > [!CAUTION]
 > Piping code from the internet directly into `bash` can be dangerous. Make sure you trust the source and know what it will do to your system.
 
