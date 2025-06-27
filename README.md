@@ -7,7 +7,7 @@ All commands should be run on the tablet.
 
 ### Fetch & run in one step 
 > [!CAUTION]
-> Piping code from the internet directly into `bash` can be dangerous. Make sure you trust the source before running this.
+> Piping code from the internet directly into `bash` can be dangerous. Make sure you trust the source and know what it will do to your system.
 
    ```bash
    wget -qO- https://raw.githubusercontent.com/rmitchellscott/rm-version-checker/main/rm-version-checker.sh | bash
@@ -51,3 +51,6 @@ Version (Active):     3.20.0.92
 Version (Fallback):   3.18.2.3
 Version (Next boot):  3.20.0.92
 ```
+
+## Swithing Boot Partitions
+To switch boot partitions, check out this project: https://github.com/ddvk/remarkable-update/blob/main/switch.sh
