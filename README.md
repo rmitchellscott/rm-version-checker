@@ -2,6 +2,8 @@
 
 A tiny bash script to report the active and fallback reMarkable OS versions.
 
+Want to switch which partition the tablet boots from? Check out [my version switcher](https://github.com/rmitchellscott/rm-version-switcher)!
+
 ## Installation & Usage
 All commands should be run on the tablet.
 
