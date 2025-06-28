@@ -21,6 +21,14 @@ active_version=$(grep '^REMARKABLE_RELEASE_VERSION=' /usr/share/remarkable/updat
 # 6. Mount & clean version on the fallback root
 mnt=$(mktemp -d)
 mount -o ro "${base_dev}p${other_p}" "$mnt"
+
+# Set up cleanup trap to ensure umount/rmdir always run
+cleanup() {
+  umount "$mnt" 2>/dev/null || true
+  rmdir "$mnt" 2>/dev/null || true
+}
+trap cleanup EXIT
+
 fallback_version=$(grep '^REMARKABLE_RELEASE_VERSION=' "$mnt/usr/share/remarkable/update.conf" \
                    | cut -d= -f2)
 
@@ -34,16 +42,28 @@ else
 fi
 
 # 8. Print summary
-cat << EOF
-→ Active:    p$running_p
-→ Fallback:  p$other_p
-→ Next boot: p$boot_p
+# Color codes
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
 
-Version (Active):     $active_version
-Version (Fallback):   $fallback_version
-Version (Next boot):  $boot_version
-EOF
+# Determine colors and next boot indicators
+if [[ "$boot_p" == "$running_p" ]]; then
+  active_color="$GREEN"
+  active_suffix=" (next boot)"
+else
+  active_color="$GREEN"
+  active_suffix=""
+fi
 
-# 9. Cleanup
-umount "$mnt"
-rmdir "$mnt"
+if [[ "$boot_p" == "$other_p" ]]; then
+  fallback_color="$YELLOW"
+  fallback_suffix=" (next boot)"
+else
+  fallback_color="$BLUE"
+  fallback_suffix=""
+fi
+
+printf "Active:     p%-2s   ${active_color}%s%s${NC}\n" "$running_p" "$active_version" "$active_suffix"
+printf "Fallback:   p%-2s   ${fallback_color}%s%s${NC}\n" "$other_p" "$fallback_version" "$fallback_suffix"
