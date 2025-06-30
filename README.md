@@ -45,13 +45,13 @@ All commands should be run on the tablet.
 Example output:
 
 ```text
-→ Active:    p2
-→ Fallback:  p3
-→ Next boot: p2
-
-Version (Active):     3.20.0.92
-Version (Fallback):   3.18.2.3
-Version (Next boot):  3.20.0.92
+┌──────────────────────────────────────────────────┐
+│          reMarkable OS Version Checker           │
+└──────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│ Partition A (p2): 3.20.0.92 [ACTIVE] [NEXT BOOT] │
+│ Partition B (p3): 3.18.2.3                       │
+└──────────────────────────────────────────────────┘
 ```
 
 ## Switching Boot Partitions
