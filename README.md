@@ -55,4 +55,4 @@ Example output:
 ```
 
 ## Switching Boot Partitions
-To switch boot partitions, check out this project: https://github.com/ddvk/remarkable-update/blob/main/switch.sh
+To switch boot partitions with a user-friendly interface, check out my other project: https://github.com/rmitchellscott/rm-version-switcher
