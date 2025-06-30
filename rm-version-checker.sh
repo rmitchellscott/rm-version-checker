@@ -12,7 +12,11 @@ base_dev=${running_dev%p*}          # e.g. /dev/mmcblk2
 other_p=$(( running_p == 2 ? 3 : 2 ))
 
 # 4. Get next boot partition from U-Boot env
-boot_p=$(fw_printenv active_partition 2>/dev/null | cut -d= -f2 || echo "unknown")
+boot_p=$(fw_printenv active_partition 2>/dev/null | cut -d= -f2)
+# If fw_printenv fails or returns empty, assume next boot is current partition
+if [[ -z "$boot_p" || "$boot_p" == "unknown" ]]; then
+    boot_p="$running_p"
+fi
 
 # 5. Read & clean version on the active root
 active_version=$(grep '^REMARKABLE_RELEASE_VERSION=' /usr/share/remarkable/update.conf \
@@ -41,29 +45,160 @@ else
   boot_version="unknown"
 fi
 
-# 8. Print summary
+# 8. Print summary in rm-version-switcher format
 # Color codes
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[0;33m'
+GRAY='\033[0;90m'
 NC='\033[0m' # No Color
 
-# Determine colors and next boot indicators
-if [[ "$boot_p" == "$running_p" ]]; then
-  active_color="$GREEN"
-  active_suffix=" (next boot)"
+# Box drawing characters
+WIDTH=52
+TOP_LEFT='┌'
+TOP_RIGHT='┐'
+BOTTOM_LEFT='└'
+BOTTOM_RIGHT='┘'
+HORIZONTAL='─'
+VERTICAL='│'
+
+# Helper function to create horizontal line
+make_line() {
+    local length=$1
+    echo -ne "$GRAY$TOP_LEFT"
+    for ((i=0; i<length-2; i++)); do
+        echo -ne "$HORIZONTAL"
+    done
+    echo -e "$TOP_RIGHT$NC"
+}
+
+# Helper function to create bottom line
+make_bottom() {
+    local length=$1
+    echo -ne "$GRAY$BOTTOM_LEFT"
+    for ((i=0; i<length-2; i++)); do
+        echo -ne "$HORIZONTAL"
+    done
+    echo -e "$BOTTOM_RIGHT$NC"
+}
+
+# Helper function to pad text to center it
+center_text() {
+    local text="$1"
+    local width=$2
+    local text_len=${#text}
+    local padding=$(( (width - text_len - 2) / 2 ))
+    local right_padding=$(( width - text_len - 2 - padding ))
+    
+    echo -ne "$GRAY$VERTICAL$NC"
+    for ((i=0; i<padding; i++)); do echo -ne " "; done
+    echo -ne "$text"
+    for ((i=0; i<right_padding; i++)); do echo -ne " "; done
+    echo -e "$GRAY$VERTICAL$NC"
+}
+
+# Map partitions to A/B format (p2=A, p3=B)
+if [[ "${running_p:-}" == "2" ]]; then
+    partition_a_version="$active_version"
+    partition_b_version="$fallback_version"
+    partition_a_color="$GREEN"
+    partition_b_color="$BLUE"
+    partition_a_active="[ACTIVE]"
+    partition_b_active=""
+    if [[ "${boot_p:-}" == "2" ]]; then
+        partition_a_next="[NEXT BOOT]"
+        partition_b_next=""
+    elif [[ "${boot_p:-}" == "3" ]]; then
+        partition_a_next=""
+        partition_b_next="[NEXT BOOT]"
+    else
+        partition_a_next=""
+        partition_b_next=""
+    fi
 else
-  active_color="$GREEN"
-  active_suffix=""
+    partition_a_version="$fallback_version"
+    partition_b_version="$active_version"
+    partition_a_color="$BLUE"
+    partition_b_color="$GREEN"
+    partition_a_active=""
+    partition_b_active="[ACTIVE]"
+    if [[ "${boot_p:-}" == "2" ]]; then
+        partition_a_next="[NEXT BOOT]"
+        partition_b_next=""
+    elif [[ "${boot_p:-}" == "3" ]]; then
+        partition_a_next=""
+        partition_b_next="[NEXT BOOT]"
+    else
+        partition_a_next=""
+        partition_b_next=""
+    fi
 fi
 
-if [[ "$boot_p" == "$other_p" ]]; then
-  fallback_color="$YELLOW"
-  fallback_suffix=" (next boot)"
+# Print title box
+make_line $WIDTH
+center_text "reMarkable OS Version Checker" $WIDTH
+make_bottom $WIDTH
+
+# Calculate padding for alignment
+max_len=$(( ${#partition_a_version} > ${#partition_b_version} ? ${#partition_a_version} : ${#partition_b_version} ))
+pad_a=$(( max_len - ${#partition_a_version} ))
+pad_b=$(( max_len - ${#partition_b_version} ))
+
+# Print partition box
+make_line $WIDTH
+
+# Build and print partition A line
+if [[ "${running_p:-}" == "2" ]]; then
+    echo -ne "$GRAY$VERTICAL$NC Partition A ${GRAY}(p2)${NC}: $partition_a_color$partition_a_version$NC"
 else
-  fallback_color="$BLUE"
-  fallback_suffix=""
+    echo -ne "$GRAY$VERTICAL$NC Partition A ${GRAY}(p3)${NC}: $partition_a_color$partition_a_version$NC"
+fi
+for ((i=0; i<pad_a; i++)); do printf " "; done
+if [[ -n "$partition_a_active" ]]; then
+    echo -ne " $GREEN$partition_a_active$NC"
+fi
+if [[ -n "$partition_a_next" ]]; then
+    if [[ "${running_p:-}" == "2" ]]; then
+        echo -ne " $GREEN$partition_a_next$NC"
+    else
+        echo -ne " $YELLOW$partition_a_next$NC"
+    fi
 fi
 
-printf "Active:     p%-2s   ${active_color}%s%s${NC}\n" "$running_p" "$active_version" "$active_suffix"
-printf "Fallback:   p%-2s   ${fallback_color}%s%s${NC}\n" "$other_p" "$fallback_version" "$fallback_suffix"
+# Calculate remaining space and pad to right edge
+# Base: "│ Partition A (p2): " = 19 characters
+remaining_a=$(( WIDTH - 19 - ${#partition_a_version} - pad_a - 2 ))
+if [[ -n "$partition_a_active" ]]; then remaining_a=$((remaining_a - 9)); fi
+if [[ -n "$partition_a_next" ]]; then remaining_a=$((remaining_a - 12)); fi
+if [[ $remaining_a -lt 1 ]]; then remaining_a=1; fi
+for ((i=0; i<remaining_a; i++)); do printf " "; done
+echo -e "$GRAY$VERTICAL$NC"
+
+# Build and print partition B line
+if [[ "${running_p:-}" == "2" ]]; then
+    echo -ne "$GRAY$VERTICAL$NC Partition B ${GRAY}(p3)${NC}: $partition_b_color$partition_b_version$NC"
+else
+    echo -ne "$GRAY$VERTICAL$NC Partition B ${GRAY}(p2)${NC}: $partition_b_color$partition_b_version$NC"
+fi
+for ((i=0; i<pad_b; i++)); do printf " "; done
+if [[ -n "$partition_b_active" ]]; then
+    echo -ne " $GREEN$partition_b_active$NC"
+fi
+if [[ -n "$partition_b_next" ]]; then
+    if [[ "${running_p:-}" == "3" ]]; then
+        echo -ne " $GREEN$partition_b_next$NC"
+    else
+        echo -ne " $YELLOW$partition_b_next$NC"
+    fi
+fi
+
+# Calculate remaining space and pad to right edge
+# Base: "│ Partition B (p3): " = 19 characters
+remaining_b=$(( WIDTH - 19 - ${#partition_b_version} - pad_b - 2 ))
+if [[ -n "$partition_b_active" ]]; then remaining_b=$((remaining_b - 9)); fi
+if [[ -n "$partition_b_next" ]]; then remaining_b=$((remaining_b - 12)); fi
+if [[ $remaining_b -lt 1 ]]; then remaining_b=1; fi
+for ((i=0; i<remaining_b; i++)); do printf " "; done
+echo -e "$GRAY$VERTICAL$NC"
+
+make_bottom $WIDTH
