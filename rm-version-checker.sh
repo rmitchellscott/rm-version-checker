@@ -1,26 +1,46 @@
 #!/bin/bash
 set -e
 
-# 1. Determine the running device+partition (e.g. /dev/mmcblk2p2)
-running_dev=$(rootdev)
-running_p=${running_dev##*p}    # "2"
+# Check if this is a reMarkable Paper Pro (has lpgpr root_part file)
+if [[ -f /sys/devices/platform/lpgpr/root_part ]]; then
+    # Paper Pro: determine current partition from mount point
+    running_dev=$(mount | grep ' / ' | cut -d' ' -f1)
+    base_dev=${running_dev%p*}
+    running_p=${running_dev##*p}
+    other_p=$(( running_p == 2 ? 3 : 2 ))
+    
+    # Get next boot partition from root_part (a/b format)
+    next_boot_part=$(cat /sys/devices/platform/lpgpr/root_part)
+    if [[ "$next_boot_part" == "a" ]]; then
+        boot_p=2
+    elif [[ "$next_boot_part" == "b" ]]; then
+        boot_p=3
+    else
+        boot_p="$running_p"  # fallback to current
+    fi
+else
+    # Original reMarkable: use rootdev
+    # 1. Determine the running device+partition (e.g. /dev/mmcblk2p2)
+    running_dev=$(rootdev)
+    running_p=${running_dev##*p}    # "2"
 
-# 2. Derive the block-device base (everything before the "p2")
-base_dev=${running_dev%p*}          # e.g. /dev/mmcblk2
+    # 2. Derive the block-device base (everything before the "p2")
+    base_dev=${running_dev%p*}          # e.g. /dev/mmcblk2
 
-# 3. Figure out the other (fallback) partition
-other_p=$(( running_p == 2 ? 3 : 2 ))
-
-# 4. Get next boot partition from U-Boot env
-boot_p=$(fw_printenv active_partition 2>/dev/null | cut -d= -f2)
-# If fw_printenv fails or returns empty, assume next boot is current partition
-if [[ -z "$boot_p" || "$boot_p" == "unknown" ]]; then
-    boot_p="$running_p"
+    # 3. Figure out the other (fallback) partition
+    other_p=$(( running_p == 2 ? 3 : 2 ))
+    
+    # 4. Get next boot partition from U-Boot env
+    boot_p=$(fw_printenv active_partition 2>/dev/null | cut -d= -f2)
+    # If fw_printenv fails or returns empty, assume next boot is current partition
+    if [[ -z "$boot_p" || "$boot_p" == "unknown" ]]; then
+        boot_p="$running_p"
+    fi
 fi
 
 # 5. Read & clean version on the active root
-active_version=$(grep '^REMARKABLE_RELEASE_VERSION=' /usr/share/remarkable/update.conf \
-                 | cut -d= -f2)
+active_version=$(grep '^IMG_VERSION=' /etc/os-release \
+                 | cut -d= -f2 | tr -d '"')
 
 # 6. Mount & clean version on the fallback root
 mnt=$(mktemp -d)
@@ -33,8 +53,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-fallback_version=$(grep '^REMARKABLE_RELEASE_VERSION=' "$mnt/usr/share/remarkable/update.conf" \
-                   | cut -d= -f2)
+fallback_version=$(grep '^IMG_VERSION=' "$mnt/etc/os-release" \
+                   | cut -d= -f2 | tr -d '"')
 
 # 7. Determine version for next boot partition
 if [[ "$boot_p" == "$running_p" ]]; then
@@ -98,40 +118,35 @@ center_text() {
 }
 
 # Map partitions to A/B format (p2=A, p3=B)
+# Determine which partition has which version based on what's running
 if [[ "${running_p:-}" == "2" ]]; then
+    # Currently running p2 (A), so active_version is A, fallback_version is B
     partition_a_version="$active_version"
     partition_b_version="$fallback_version"
     partition_a_color="$GREEN"
     partition_b_color="$BLUE"
     partition_a_active="[ACTIVE]"
     partition_b_active=""
-    if [[ "${boot_p:-}" == "2" ]]; then
-        partition_a_next="[NEXT BOOT]"
-        partition_b_next=""
-    elif [[ "${boot_p:-}" == "3" ]]; then
-        partition_a_next=""
-        partition_b_next="[NEXT BOOT]"
-    else
-        partition_a_next=""
-        partition_b_next=""
-    fi
 else
+    # Currently running p3 (B), so active_version is B, fallback_version is A
     partition_a_version="$fallback_version"
     partition_b_version="$active_version"
     partition_a_color="$BLUE"
     partition_b_color="$GREEN"
     partition_a_active=""
     partition_b_active="[ACTIVE]"
-    if [[ "${boot_p:-}" == "2" ]]; then
-        partition_a_next="[NEXT BOOT]"
-        partition_b_next=""
-    elif [[ "${boot_p:-}" == "3" ]]; then
-        partition_a_next=""
-        partition_b_next="[NEXT BOOT]"
-    else
-        partition_a_next=""
-        partition_b_next=""
-    fi
+fi
+
+# Set next boot indicators
+if [[ "${boot_p:-}" == "2" ]]; then
+    partition_a_next="[NEXT BOOT]"
+    partition_b_next=""
+elif [[ "${boot_p:-}" == "3" ]]; then
+    partition_a_next=""
+    partition_b_next="[NEXT BOOT]"
+else
+    partition_a_next=""
+    partition_b_next=""
 fi
 
 # Print title box
@@ -147,12 +162,8 @@ pad_b=$(( max_len - ${#partition_b_version} ))
 # Print partition box
 make_line $WIDTH
 
-# Build and print partition A line
-if [[ "${running_p:-}" == "2" ]]; then
-    echo -ne "$GRAY$VERTICAL$NC Partition A ${GRAY}(p2)${NC}: $partition_a_color$partition_a_version$NC"
-else
-    echo -ne "$GRAY$VERTICAL$NC Partition A ${GRAY}(p3)${NC}: $partition_a_color$partition_a_version$NC"
-fi
+# Build and print partition A line (always p2)
+echo -ne "$GRAY$VERTICAL$NC Partition A ${GRAY}(p2)${NC}: $partition_a_color$partition_a_version$NC"
 for ((i=0; i<pad_a; i++)); do printf " "; done
 if [[ -n "$partition_a_active" ]]; then
     echo -ne " $GREEN$partition_a_active$NC"
@@ -174,12 +185,8 @@ if [[ $remaining_a -lt 1 ]]; then remaining_a=1; fi
 for ((i=0; i<remaining_a; i++)); do printf " "; done
 echo -e "$GRAY$VERTICAL$NC"
 
-# Build and print partition B line
-if [[ "${running_p:-}" == "2" ]]; then
-    echo -ne "$GRAY$VERTICAL$NC Partition B ${GRAY}(p3)${NC}: $partition_b_color$partition_b_version$NC"
-else
-    echo -ne "$GRAY$VERTICAL$NC Partition B ${GRAY}(p2)${NC}: $partition_b_color$partition_b_version$NC"
-fi
+# Build and print partition B line (always p3)
+echo -ne "$GRAY$VERTICAL$NC Partition B ${GRAY}(p3)${NC}: $partition_b_color$partition_b_version$NC"
 for ((i=0; i<pad_b; i++)); do printf " "; done
 if [[ -n "$partition_b_active" ]]; then
     echo -ne " $GREEN$partition_b_active$NC"
