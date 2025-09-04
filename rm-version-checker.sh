@@ -39,8 +39,13 @@ else
 fi
 
 # 5. Read & clean version on the active root
-active_version=$(grep '^IMG_VERSION=' /etc/os-release \
-                 | cut -d= -f2 | tr -d '"')
+if [[ -f /usr/share/remarkable/update.conf ]]; then
+    active_version=$(grep 'RELEASE_VERSION=' /usr/share/remarkable/update.conf \
+                     | cut -d= -f2 | tr -d '"')
+else
+    active_version=$(grep '^IMG_VERSION=' /etc/os-release \
+                     | cut -d= -f2 | tr -d '"')
+fi
 
 # 6. Mount & clean version on the fallback root
 mnt=$(mktemp -d)
@@ -53,8 +58,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-fallback_version=$(grep '^IMG_VERSION=' "$mnt/etc/os-release" \
-                   | cut -d= -f2 | tr -d '"')
+if [[ -f "$mnt/usr/share/remarkable/update.conf" ]]; then
+    fallback_version=$(grep 'RELEASE_VERSION=' "$mnt/usr/share/remarkable/update.conf" \
+                       | cut -d= -f2 | tr -d '"')
+else
+    fallback_version=$(grep '^IMG_VERSION=' "$mnt/etc/os-release" \
+                       | cut -d= -f2 | tr -d '"')
+fi
 
 # 7. Determine version for next boot partition
 if [[ "$boot_p" == "$running_p" ]]; then
