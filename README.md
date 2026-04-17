@@ -56,3 +56,8 @@ Example output:
 
 ## Switching Boot Partitions
 To switch boot partitions with a user-friendly interface, check out my other project: https://github.com/rmitchellscott/rm-version-switcher
+
+## License
+Copyright (C) 2025 Mitchell Scott
+
+Licensed under the GNU General Public License v3.0.
